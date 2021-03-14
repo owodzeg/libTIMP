@@ -1,7 +1,5 @@
 #include "libTIMP.hpp"
 
-using namespace std;
-
 libTIMP::libTIMP()
 {
 
@@ -9,10 +7,9 @@ libTIMP::libTIMP()
 
 void libTIMP::load(std::string file)
 {
-    ifstream TIMP(file, std::ios::binary);
+    std::ifstream TIMP(file, std::ios::binary);
 
-    cout << "Reading " << file << endl;
-
+    ///Read width and height
     TIMP.seekg(0x12);
     TIMP.read(reinterpret_cast<char*>(&width), sizeof(uint16_t));
 
@@ -23,46 +20,24 @@ void libTIMP::load(std::string file)
 
     uint32_t pal_data,px_data;
 
+    ///Read offsets
     TIMP.seekg(0x20);
     TIMP.read(reinterpret_cast<char*>(&pal_data), sizeof(uint32_t));
 
     TIMP.seekg(0x24);
     TIMP.read(reinterpret_cast<char*>(&px_data), sizeof(uint32_t));
 
-    ///pal_data == 0 when palette is not defined
+    ///Pal_data == 0 when palette is not defined
     if(pal_data != 0x0)
     {
         pal_colors = (px_data - 0x30) / 0x4;
-        cout << pal_colors << " color TIMP" << endl;
     }
     else
     {
         pal_colors = 0;
     }
 
-    /*int w = floor(width / 16);
-    int h = floor(height / 16);
-
-    if(w%16 != 0)
-    {
-        float l = floor(log2(w*16));
-        float nw = pow(2,l+1);
-        width = nw;
-
-        cout << w << " " << l << " " << nw << endl;
-    }
-
-    if(h%16 != 0)
-    {
-        float l = floor(log2(h*16));
-        float nh = pow(2,l+1);
-        height = nh;
-
-        cout << h << " " << l << " " << nh << endl;
-    }*/
-
-    //system("pause");
-
+    ///Apply swizzling
     if(pal_colors == 16)
     {
         chunk_w = 32;
@@ -84,6 +59,7 @@ void libTIMP::load(std::string file)
         chunk_h = 8;
     }
 
+    ///Read palette
     for(int i=0; i<pal_colors; i++)
     {
         uint8_t r,g,b,a;
@@ -103,8 +79,10 @@ void libTIMP::load(std::string file)
         pal_color.push_back(sf::Color(r,g,b,a));
     }
 
+    ///Amount of pixels
     int px_length = width*height;
 
+    ///If palette exists, read pixels according to palette
     if(pal_data != 0x0)
     {
         for(int i=0; i<px_length; i++)
@@ -114,18 +92,18 @@ void libTIMP::load(std::string file)
             TIMP.seekg(px_data+i);
             TIMP.read(reinterpret_cast<char*>(&pixel), sizeof(uint8_t));
 
-            if(pal_colors == 256)
+            if(pal_colors == 256) ///8 bits per pixel
             {
                 pixels.push_back(pixel);
             }
-            else if((pal_colors == 16) || (pal_colors == 48))
+            else if((pal_colors == 16) || (pal_colors == 48)) ///4 bits per pixel
             {
                 pixels.push_back(pixel&0xF);
                 pixels.push_back((pixel>>4)&0xF);
             }
         }
     }
-    else
+    else ///If palette doesnt exist, read colors from pixels
     {
         for(int i=0; i<px_length; i++)
         {
@@ -155,12 +133,14 @@ void libTIMP::load(std::string file)
 
 sf::Image libTIMP::convertToImage()
 {
+    ///Create empty image
     sf::Image image;
     image.create(width,height,sf::Color(0,0,0,0));
 
     int x=0,y=0;
     unsigned int p=0;
 
+    ///Assign pixels with swizzling
     while(p < pixels.size())
     {
         for(int ch=0; ch<chunk_h; ch++)
@@ -171,9 +151,9 @@ sf::Image libTIMP::convertToImage()
                 if(y+ch < height)
                 {
                     image.setPixel(x+cw,y+ch,pal_color[pixels[p]]);
-
                 }
 
+                ///Pixels are incremented nonetheless so swizzling can work on textures with sizes that are not a power of 2
                 p++;
             }
         }
@@ -192,5 +172,6 @@ sf::Image libTIMP::convertToImage()
         }
     }
 
+    ///Return finished sf::Image
     return image;
 }
